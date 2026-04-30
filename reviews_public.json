@@ -1,0 +1,17 @@
+[
+  {"product_id": 1, "user_id": 101, "rating": 5, "comment": "Great book!"},
+  {"product_id": 1, "user_id": 102, "rating": 4, "comment": "Good read"},
+  {"product_id": 2, "user_id": 101, "rating": 3, "comment": "Average product"},
+  {"product_id": 2, "user_id": 103, "rating": 5, "comment": "Excellent!"},
+  {"product_id": 3, "user_id": 104, "rating": 2, "comment": "Not great"},
+  {"product_id": 4, "user_id": 105, "rating": 4, "comment": "Nice clothing"},
+  {"product_id": 5, "user_id": 106, "rating": 5, "comment": "Best electronics"},
+  {"product_id": 6, "user_id": 107, "rating": 3, "comment": "Decent"},
+  {"product_id": 7, "user_id": 108, "rating": 4, "comment": "Good quality"},
+  {"product_id": 8, "user_id": 109, "rating": 1, "comment": "Terrible"},
+  {"product_id": 9, "user_id": 110, "rating": 5, "comment": "Loved it"},
+  {"product_id": 10, "user_id": 101, "rating": 4, "comment": "Worth buying"},
+  {"product_id": 11, "user_id": 102, "rating": 3, "comment": "Okay"},
+  {"product_id": 1, "user_id": 103, "rating": 5, "comment": "Must read"},
+  {"product_id": 2, "user_id": 104, "rating": 2, "comment": "Disappointed"}
+]
