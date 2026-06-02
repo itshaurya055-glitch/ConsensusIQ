@@ -1,8 +1,7 @@
 import sqlite3
 
-connection = sqlite3.connect("market_news.db")
-
-cursor = connection.cursor()
+conn = sqlite3.connect("market_news.db")
+cursor = conn.cursor()
 
 cursor.execute("SELECT COUNT(*) FROM news")
 

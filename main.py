@@ -1,5 +1,9 @@
 from src.news_collector import fetch_market_news
 from src.database import save_news
+from src.news_collector import fetch_market_news
+from src.groq_agent import analyze_news
+
+
 
 
 BAD_KEYWORDS = [
@@ -57,6 +61,24 @@ for article in filtered_news:
     print(article.get("content"))
 
     print()
+
+
+
+news = fetch_market_news()
+
+article = news[0]
+
+print("TITLE:")
+print(article["title"])
+
+print("\nAnalyzing...\n")
+
+result = analyze_news(
+    article["title"],
+    article["content"]
+)
+
+print(result)
 print("Total articles fetched:", len(news))
 print("After filtering:", len(filtered_news))
 print(article["title"])

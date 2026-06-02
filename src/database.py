@@ -9,18 +9,16 @@ CREATE TABLE IF NOT EXISTS news(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT,
     content TEXT,
-    url TEXT
+    url TEXT UNIQUE
 )
 """)
-
 connection.commit()
-
 
 def save_news(title, content, url):
 
     cursor.execute(
         """
-        INSERT INTO news(title, content, url)
+        INSERT OR IGNORE INTO news(title, content, url)
         VALUES (?, ?, ?)
         """,
         (title, content, url)
