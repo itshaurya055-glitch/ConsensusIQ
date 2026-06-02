@@ -44,4 +44,11 @@ Return format:
         ]
     )
 
-    return response.choices[0].message.content
+    import json
+
+    response_text = response.choices[0].message.content
+
+    response_text = response_text.replace("```json", "")
+    response_text = response_text.replace("```", "")
+
+    return json.loads(response_text)

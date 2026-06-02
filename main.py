@@ -1,19 +1,20 @@
 from src.news_collector import fetch_market_news
-from src.database import save_news
 from src.news_collector import fetch_market_news
 from src.groq_agent import analyze_news
+from src.database import save_signal
 
 
 
 
 BAD_KEYWORDS = [
+    "sensex",
+    "nifty",
+    "watch",
     "calendar",
-    "watch list",
-    "market live",
-    "dashboard",
-    "latest news",
-    "share market today",
-    "pulse by zerodha"
+    "homepage",
+    "market data",
+    "stock quotes",
+    "live announcements"
 ]
 
 def filter_articles(results):
@@ -41,27 +42,24 @@ filtered_news = filter_articles(news)
 
 for article in filtered_news:
 
-    save_news(
-        article.get("title"),
-        article.get("content"),
-        article.get("url")
+    print("\nAnalyzing:")
+    print(article["title"])
+
+    signal = analyze_news(
+        article["title"],
+        article["content"]
     )
 
-    print("Saved:", article.get("title"))
+    save_signal(
+        article["title"],
+        signal["direction"],
+        signal["confidence"],
+        signal["sector"],
+        signal["event_type"],
+        signal["impact"]
+    )
 
-    print("=" * 80)
-
-    print("TITLE:")
-    print(article.get("title"))
-
-    print("\nURL:")
-    print(article.get("url"))
-
-    print("\nCONTENT:")
-    print(article.get("content"))
-
-    print()
-
+    print("Signal Saved")
 
 
 news = fetch_market_news()
