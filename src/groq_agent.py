@@ -9,7 +9,7 @@ client = Groq(
     api_key=os.getenv("GROQ_API_KEY")
 )
 
-def analyze_news(title, content):
+def analyze_news(title, content,agent_prompt):
 
     prompt = f"""
 You are a financial analyst.
@@ -26,7 +26,7 @@ Return format:
 
 {{
     "direction": "BUY/HOLD/SELL",
-    "confidence": 0,
+    "confidence": 0-100,
     "sector": "",
     "event_type": "",
     "impact": "LOW/MEDIUM/HIGH"
@@ -38,10 +38,15 @@ Return format:
         temperature=0,
         messages=[
             {
+                "role":"system",
+                "content": agent_prompt
+            },
+            {
                 "role": "user",
                 "content": prompt
             }
         ]
+            
     )
 
     import json
@@ -50,5 +55,9 @@ Return format:
 
     response_text = response_text.replace("```json", "")
     response_text = response_text.replace("```", "")
+
+    print("\nRAW RESPONSE:")
+    print(response_text)
+    print("=" * 60)
 
     return json.loads(response_text)
