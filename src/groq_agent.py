@@ -119,7 +119,7 @@ You must return a valid JSON object matching the following structure:
 """
 
     completion = client.chat.completions.create(
-        model="llama3-8b-8192",  # Fast & high limits
+        model="llama-3.1-8b-instant",  # Successor model, extremely fast
         messages=[
             {"role": "system", "content": "You are an expert multi-agent financial analyst coordinator. Return JSON only."},
             {"role": "user", "content": prompt}
