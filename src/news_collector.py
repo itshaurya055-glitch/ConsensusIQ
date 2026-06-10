@@ -1,6 +1,7 @@
 from tavily import TavilyClient
 from dotenv import load_dotenv
 import os
+import concurrent.futures
 
 load_dotenv()
 
@@ -10,26 +11,33 @@ client = TavilyClient(api_key=api_key)
 
 
 def fetch_market_news():
-
     queries = [
-    "Indian stock market news today",
-    "company earnings today India",
-    "RBI announcement today",
-    "IPO news India today",
-    "market moving news today"
-]
+        "Indian stock market news today",
+        "company earnings today India",
+        "RBI announcement today",
+        "IPO news India today",
+        "market moving news today"
+    ]
 
     all_results = []
 
-    for query in queries:
+    def search_query(query):
+        try:
+            response = client.search(
+                query=query,
+                search_depth="advanced",
+                max_results=5
+            )
+            return response.get("results", [])
+        except Exception as e:
+            print(f"[NewsCollector] Search failed for '{query}': {e}")
+            return []
 
-        response = client.search(
-            query=query,
-            search_depth="advanced",
-            max_results=5
-        )
-
-        all_results.extend(response["results"])
+    # Run searches concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        results = executor.map(search_query, queries)
+        for res in results:
+            all_results.extend(res)
 
     return all_results
 
@@ -71,7 +79,6 @@ GOOD_KEYWORDS = [
 ]
 
 def is_useful_article(title):
-
     title = title.lower()
 
     # Step 1: Reject junk
