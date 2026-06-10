@@ -1,7 +1,8 @@
+import os
 import sqlite3
 from datetime import datetime
 
-DB_PATH = "market_news.db"
+DB_PATH = os.environ.get("DB_PATH", "market_news.db")
 
 
 def get_db():
