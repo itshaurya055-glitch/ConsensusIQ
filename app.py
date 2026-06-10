@@ -171,10 +171,9 @@ def get_herd_history():
 
     herd_rows = conn.execute(
         """
-        SELECT timestamp, AVG(herd_score) as avg_score
+        SELECT timestamp, herd_score as avg_score
         FROM herd_scores
         WHERE timestamp >= ?
-        GROUP BY strftime('%Y-%m-%d %H', timestamp)
         ORDER BY timestamp ASC
         """,
         (since,),
