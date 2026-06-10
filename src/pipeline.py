@@ -1,21 +1,21 @@
 """
 pipeline.py
 -----------
-Full AI-herding pipeline:
+Full AI-herding pipeline optimized for Render:
   1. Fetch market news via Tavily
   2. Filter for quality articles
-  3. Run 4 AI agents (conservative, momentum, value, risk_averse) via Groq
-  4. Compute weighted herd score
-  5. Persist everything to SQLite
+  3. Run LLM to simulate 4 AI agents in a single API call (combined prompt)
+  4. Run article analysis concurrently in a thread pool (ThreadPoolExecutor)
+  5. Compute weighted herd score and persist results to SQLite
   6. Save a market snapshot with live NIFTY price
 """
 
 import logging
 from datetime import datetime
+import concurrent.futures
 
-from src.news_collector import fetch_market_news, is_useful_article
-from src.groq_agent import analyze_news
-from src.agents import AGENTS
+from src.news_collector import fetch_market_news
+from src.groq_agent import analyze_news_multi_agent
 from src.herd_score import calculate_weighted_consensus
 from src.database import (
     save_news,
@@ -75,6 +75,82 @@ def score_to_risk(score: float) -> str:
 
 
 # ─────────────────────────────────────────
+# ARTICLE WORKER
+# ─────────────────────────────────────────
+
+def process_single_article(article) -> float | None:
+    """Process a single article: call multi-agent LLM and save results to DB."""
+    title   = article.get("title", "")
+    content = article.get("content", "")
+    url     = article.get("url", "")
+
+    # 1. Save news article
+    try:
+        save_news(title, content, url)
+    except Exception as exc:
+        logger.warning("[Pipeline] save_news failed for '%s': %s", title[:50], exc)
+
+    # 2. Get combined multi-agent analysis from Groq (1 API call instead of 4)
+    try:
+        multi_result = analyze_news_multi_agent(title, content)
+    except Exception as exc:
+        logger.error("[Pipeline] Multi-agent analysis failed for '%s': %s", title[:50], exc)
+        return None
+
+    agent_results = []
+    
+    # 3. Parse and save each agent's signal
+    for agent_name in ("conservative", "momentum", "value", "risk_averse"):
+        agent_data = multi_result.get(agent_name, {})
+        direction  = agent_data.get("direction", "HOLD")
+        confidence = agent_data.get("confidence", 50)
+        sector     = agent_data.get("sector", "UNKNOWN")
+        event_type = agent_data.get("event_type", "UNKNOWN")
+        impact     = agent_data.get("impact", "LOW")
+
+        try:
+            save_agent_signal(
+                article_title=title,
+                agent_name=agent_name,
+                direction=direction,
+                confidence=confidence,
+                sector=sector,
+                event_type=event_type,
+                impact=impact
+            )
+            agent_results.append({
+                "direction":  direction,
+                "confidence": confidence
+            })
+            
+            # Save to main signals table using first agent's metadata
+            if agent_name == "conservative":
+                save_signal(
+                    title=title,
+                    direction=direction,
+                    confidence=confidence,
+                    sector=sector,
+                    event_type=event_type,
+                    impact=impact
+                )
+        except Exception as exc:
+            logger.warning("[Pipeline] Save signal failed for %s on '%s': %s", agent_name, title[:50], exc)
+
+    # 4. Calculate herd score for this article
+    if agent_results:
+        try:
+            h_score = calculate_weighted_consensus(agent_results)
+            risk    = score_to_risk(h_score)
+            save_herd_score(title, h_score, risk)
+            logger.info("[Pipeline] Article '%s...' → herd=%.1f %s", title[:50], h_score, risk)
+            return h_score
+        except Exception as exc:
+            logger.warning("[Pipeline] Herd score calc failed: %s", exc)
+
+    return None
+
+
+# ─────────────────────────────────────────
 # MAIN PIPELINE
 # ─────────────────────────────────────────
 
@@ -99,70 +175,18 @@ def run_pipeline():
         logger.warning("[Pipeline] No useful articles found.")
         return {"status": "ok", "articles_processed": 0}
 
+    # Cap at 5 articles per run to keep within limits and ensure speed
+    target_articles = articles[:5]
     all_herd_scores = []
-    articles_processed = 0
+    
+    # ── 2. Run in parallel using a ThreadPoolExecutor ──────────────
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        results = executor.map(process_single_article, target_articles)
+        for score in results:
+            if score is not None:
+                all_herd_scores.append(score)
 
-    # ── 2. Per-article: multi-agent analysis ───────────────────────
-    for article in articles[:10]:          # cap at 10 per run to save API quota
-        title   = article.get("title", "")
-        content = article.get("content", "")
-        url     = article.get("url", "")
-
-        # Save news article
-        try:
-            save_news(title, content, url)
-        except Exception as exc:
-            logger.warning("[Pipeline] save_news failed: %s", exc)
-
-        agent_results = []
-
-        for agent_name, agent_prompt in AGENTS.items():
-            try:
-                result = analyze_news(title, content, agent_prompt)
-
-                save_agent_signal(
-                    article_title=title,
-                    agent_name=agent_name,
-                    direction=result.get("direction", "HOLD"),
-                    confidence=result.get("confidence", 50),
-                    sector=result.get("sector", "UNKNOWN"),
-                    event_type=result.get("event_type", "UNKNOWN"),
-                    impact=result.get("impact", "LOW"),
-                )
-
-                agent_results.append({
-                    "direction":  result.get("direction", "HOLD"),
-                    "confidence": result.get("confidence", 50),
-                })
-
-                # Save to signals table using first agent's sector/event_type
-                if agent_name == "conservative":
-                    save_signal(
-                        title=title,
-                        direction=result.get("direction", "HOLD"),
-                        confidence=result.get("confidence", 50),
-                        sector=result.get("sector", "UNKNOWN"),
-                        event_type=result.get("event_type", "UNKNOWN"),
-                        impact=result.get("impact", "LOW"),
-                    )
-
-            except Exception as exc:
-                logger.warning("[Pipeline] Agent %s failed on '%s': %s", agent_name, title[:60], exc)
-
-        # ── 3. Compute herd score for this article ─────────────────
-        if agent_results:
-            try:
-                h_score = calculate_weighted_consensus(agent_results)
-                risk    = score_to_risk(h_score)
-                save_herd_score(title, h_score, risk)
-                all_herd_scores.append(h_score)
-                logger.info("[Pipeline] Article '%s...' → herd=%.1f %s", title[:50], h_score, risk)
-            except Exception as exc:
-                logger.warning("[Pipeline] Herd score calc failed: %s", exc)
-
-        articles_processed += 1
-
-    # ── 4. Market snapshot ─────────────────────────────────────────
+    # ── 3. Market snapshot ─────────────────────────────────────────
     avg_herd = round(sum(all_herd_scores) / len(all_herd_scores), 2) if all_herd_scores else 0.0
 
     try:
@@ -182,18 +206,18 @@ def run_pipeline():
 
     snapshot_ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
-        save_market_snapshot(snapshot_ts, nifty_price, avg_herd, articles_processed)
+        save_market_snapshot(snapshot_ts, nifty_price, avg_herd, len(target_articles))
     except Exception as exc:
         logger.warning("[Pipeline] save_market_snapshot failed: %s", exc)
 
     logger.info(
         "[Pipeline] Done. articles=%d avg_herd=%.1f nifty=%.2f",
-        articles_processed, avg_herd, nifty_price
+        len(target_articles), avg_herd, nifty_price
     )
 
     return {
         "status":             "ok",
-        "articles_processed": articles_processed,
+        "articles_processed": len(target_articles),
         "avg_herd_score":     avg_herd,
         "nifty_price":        nifty_price,
         "timestamp":          snapshot_ts,
