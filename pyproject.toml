@@ -1,7 +1,7 @@
 [project]
 name = "ai-herding-monitor"
 version = "0.1.0"
-description = "Add your description here"
+description = "Real-time AI herding detection and market stability monitor for Indian equity markets"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -10,4 +10,7 @@ dependencies = [
     "pandas>=3.0.3",
     "python-dotenv>=1.2.2",
     "tavily-python>=0.7.25",
+    "yfinance>=1.4.1",
+    "flask>=3.0.0",
+    "apscheduler>=3.11.2",
 ]

@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ConsensusIQ – AI Herding &amp; Market Stability Monitor</title>
+<meta name="description" content="Real-time AI herding detection and market stability monitor for Indian equity markets powered by multi-agent LLM analysis."/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+  tailwind.config = {
+    darkMode:"class",
+    theme:{ extend:{ colors:{
+      "primary":"#b6c4ff","primary-container":"#2962ff","secondary":"#44d8f1",
+      "tertiary":"#ffb59a","surface":"#11131c","surface-container":"#1d1f28",
+      "surface-container-high":"#282933","surface-variant":"#32343e",
+      "on-surface":"#e1e1ee","on-surface-variant":"#c3c5d8",
+      "outline":"#8d90a2","outline-variant":"#434656","background":"#11131c",
+    }}}
+  }
+</script>
+<style>
+  :root{
+    --clr-buy:#22d3a0; --clr-hold:#f59e0b; --clr-sell:#f87171;
+    --clr-critical:#ff4d4d; --clr-high:#ff9900; --clr-medium:#facc15; --clr-low:#22d3a0;
+    --clr-accent:#7c8cff;
+  }
+  *{box-sizing:border-box;}
+  body{background:#0b0e11;color:#e1e1ee;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#2a2e39;border-radius:2px;}
+
+  .glass{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+  .hud-card{background:rgba(29,31,40,.82);border:1px solid #2a2e39;border-radius:12px;transition:border-color .25s,transform .2s;}
+  .hud-card:hover{border-color:#434656;transform:translateY(-1px);}
+
+  @keyframes pulse-cyan{
+    0%{opacity:.4;box-shadow:0 0 0 0 rgba(68,216,241,.5);}
+    70%{opacity:1;box-shadow:0 0 0 7px rgba(68,216,241,0);}
+    100%{opacity:.4;box-shadow:0 0 0 0 rgba(68,216,241,0);}
+  }
+  .status-dot{animation:pulse-cyan 2s infinite;}
+
+  @keyframes ring-glow{
+    0%,100%{filter:drop-shadow(0 0 8px rgba(124,140,255,.4));}
+    50%{filter:drop-shadow(0 0 18px rgba(124,140,255,.8));}
+  }
+  .score-ring{animation:ring-glow 3s ease-in-out infinite;}
+
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  .badge-critical{background:#ff4d4d20;color:#ff4d4d;border:1px solid #ff4d4d40;}
+  .badge-high{background:#ff990020;color:#ff9900;border:1px solid #ff990040;}
+  .badge-medium{background:#facc1520;color:#facc15;border:1px solid #facc1540;}
+  .badge-low{background:#22d3a020;color:#22d3a0;border:1px solid #22d3a040;}
+
+  .dir-buy{background:#22d3a015;color:#22d3a0;border:1px solid #22d3a030;}
+  .dir-hold{background:#f59e0b15;color:#f59e0b;border:1px solid #f59e0b30;}
+  .dir-sell{background:#f8717115;color:#f87171;border:1px solid #f8717130;}
+
+  canvas{display:block;}
+
+  .sector-bar{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--clr-accent),#44d8f1);transition:width .8s cubic-bezier(.4,0,.2,1);}
+
+  .feed-item{border-left:3px solid transparent;transition:border-color .2s,background .2s;}
+  .feed-item:hover{background:rgba(255,255,255,.03);border-left-color:var(--clr-accent);}
+
+  @keyframes shimmer{0%{background-position:-400px 0;}100%{background-position:400px 0;}}
+  .skeleton{background:linear-gradient(90deg,#1d1f28 25%,#282933 50%,#1d1f28 75%);background-size:800px 100%;animation:shimmer 1.4s infinite;border-radius:4px;}
+
+  .grad-herd{background:linear-gradient(135deg,#1a1e30 0%,#1e2438 100%);}
+  .grad-nifty{background:linear-gradient(135deg,#1a2a1e 0%,#1e3024 100%);}
+  .grad-research{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);}
+
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spin{animation:spin 1s linear infinite;}
+
+  #toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;transform:translateY(6rem);opacity:0;transition:transform .35s,opacity .35s;}
+  #toast.show{transform:translateY(0);opacity:1;}
+
+  /* Research section glow */
+  .research-divider{position:relative;}
+  .research-divider::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(124,140,255,.05),transparent);border-radius:12px;pointer-events:none;}
+
+  /* Metric card accent */
+  .metric-accent-blue{border-top:2px solid #7c8cff;}
+  .metric-accent-cyan{border-top:2px solid #44d8f1;}
+  .metric-accent-green{border-top:2px solid #22d3a0;}
+
+  /* Chart container */
+  .chart-wrap{position:relative;width:100%;}
+
+  /* Section label */
+  .section-label{font-size:11px;font-weight:700;letter-spacing:.1em;color:#8d90a2;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ TOP NAV ══════════════ -->
+<nav class="fixed top-0 left-0 w-full z-50 glass border-b border-outline-variant" style="background:rgba(11,14,17,.75);">
+  <div class="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#2962ff,#7c8cff);">
+        <span class="material-symbols-outlined text-white" style="font-size:18px;FILL:1;">hub</span>
+      </div>
+      <div>
+        <p class="text-sm font-bold text-on-surface tracking-tight">ConsensusIQ</p>
+        <p class="text-[10px] text-on-surface-variant font-medium mono">AI HERDING MONITOR</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-6">
+      <div class="hidden sm:flex items-center gap-2">
+        <span class="status-dot w-2 h-2 rounded-full bg-secondary inline-block"></span>
+        <span class="text-xs text-secondary font-semibold mono">SYSTEM ONLINE</span>
+      </div>
+      <span class="text-xs mono text-on-surface-variant" id="live-clock"></span>
+
+      <!-- Auto-snapshot countdown -->
+      <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+           style="background:#22d3a015;border:1px solid #22d3a030;" title="Next automatic NIFTY + Herd snapshot">
+        <span class="material-symbols-outlined text-secondary" style="font-size:13px;FILL:1;">timer</span>
+        <span class="text-[10px] font-bold mono text-secondary">AUTO</span>
+        <span class="text-[10px] mono" id="snapshot-countdown"
+              style="color:#44d8f1;min-width:36px;text-align:right;">15:00</span>
+      </div>
+
+      <!-- Run Pipeline button -->
+      <button id="btn-run-pipeline" onclick="triggerPipeline()"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style="background:#2962ff22;border:1px solid #2962ff55;color:#7c8cff;">
+        <span class="material-symbols-outlined" style="font-size:14px;" id="pipeline-icon">play_arrow</span>
+        Run Pipeline
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<main class="max-w-screen-2xl mx-auto px-4 pt-20 pb-10 space-y-5">
+
+  <!-- ── ROW 1: Hero KPI Cards ── -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="hud-card grad-nifty p-5 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <p class="section-label">NIFTY 50</p>
+        <span class="material-symbols-outlined text-secondary" style="font-size:20px;FILL:1;">trending_up</span>
+      </div>
+      <p class="text-3xl font-bold mono text-on-surface" id="stat-nifty">—</p>
+      <p class="text-[11px] text-on-surface-variant" id="stat-nifty-ts">Fetching…</p>
+    </div>
+    <div class="hud-card grad-herd p-5 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <p class="section-label">HERD SCORE</p>
+        <span class="material-symbols-outlined" style="font-size:20px;FILL:1;color:var(--clr-accent);">psychology</span>
+      </div>
+      <p class="text-3xl font-bold mono" id="stat-herd" style="color:var(--clr-accent);">—</p>
+      <div id="stat-risk-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold w-fit badge-low">LOW RISK</div>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <p class="section-label">ARTICLES</p>
+        <span class="material-symbols-outlined text-tertiary" style="font-size:20px;FILL:1;">newspaper</span>
+      </div>
+      <p class="text-3xl font-bold mono text-on-surface" id="stat-articles">—</p>
+      <p class="text-[11px] text-on-surface-variant">Ingested today</p>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <p class="section-label">AI SIGNALS</p>
+        <span class="material-symbols-outlined text-primary" style="font-size:20px;FILL:1;">smart_toy</span>
+      </div>
+      <p class="text-3xl font-bold mono text-on-surface" id="stat-signals">—</p>
+      <p class="text-[11px] text-on-surface-variant">Generated today</p>
+    </div>
+  </div>
+
+  <!-- ── ROW 2: Ring + Sparklines ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="hud-card p-6 flex flex-col items-center gap-4">
+      <p class="section-label self-start">CONSENSUS METER</p>
+      <div class="relative w-44 h-44">
+        <svg class="score-ring w-full h-full" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#2a2e39" stroke-width="8"/>
+          <circle id="ring-arc" cx="50" cy="50" r="42" fill="none"
+                  stroke="url(#arcGrad)" stroke-width="8" stroke-linecap="round"
+                  stroke-dasharray="0 264" transform="rotate(-90 50 50)"
+                  style="transition:stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)"/>
+          <defs>
+            <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2962ff"/><stop offset="100%" stop-color="#7c8cff"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="text-3xl font-bold mono" id="ring-score" style="color:var(--clr-accent);">0</span>
+          <span class="text-[10px] text-on-surface-variant font-semibold tracking-widest">HERD %</span>
+        </div>
+      </div>
+      <div class="w-full grid grid-cols-3 gap-2 text-center">
+        <div><p class="text-[10px] text-on-surface-variant">BUY</p><p class="mono font-bold text-sm" style="color:var(--clr-buy);" id="vote-buy">—</p></div>
+        <div><p class="text-[10px] text-on-surface-variant">HOLD</p><p class="mono font-bold text-sm" style="color:var(--clr-hold);" id="vote-hold">—</p></div>
+        <div><p class="text-[10px] text-on-surface-variant">SELL</p><p class="mono font-bold text-sm" style="color:var(--clr-sell);" id="vote-sell">—</p></div>
+      </div>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <p class="section-label">HERD SCORE – 24H</p>
+        <span class="text-[10px] mono text-on-surface-variant">Rolling avg</span>
+      </div>
+      <canvas id="canvas-herd-spark" height="140" style="width:100%;"></canvas>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <p class="section-label">NIFTY 50 – SNAPSHOTS</p>
+        <span class="text-[10px] mono text-on-surface-variant">^NSEI</span>
+      </div>
+      <canvas id="canvas-nifty-spark" height="140" style="width:100%;"></canvas>
+    </div>
+  </div>
+
+  <!-- ── ROW 3: Agent Signals + Sector + Event ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <p class="section-label">AGENT SIGNALS</p>
+      <div id="agent-signals-list" class="flex flex-col gap-3">
+        <div class="skeleton h-14 w-full"></div><div class="skeleton h-14 w-full"></div>
+        <div class="skeleton h-14 w-full"></div><div class="skeleton h-14 w-full"></div>
+      </div>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <p class="section-label">SECTOR BREAKDOWN</p>
+      <div id="sector-list" class="flex flex-col gap-3">
+        <div class="skeleton h-10 w-full"></div><div class="skeleton h-10 w-full"></div>
+        <div class="skeleton h-10 w-full"></div>
+      </div>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <p class="section-label">EVENT IMPACT TYPES</p>
+      <div id="event-list" class="flex flex-col gap-3">
+        <div class="skeleton h-10 w-full"></div><div class="skeleton h-10 w-full"></div>
+        <div class="skeleton h-10 w-full"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 4: News Feed + System Metrics ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="hud-card p-5 flex flex-col gap-3 lg:col-span-2">
+      <div class="flex items-center justify-between">
+        <p class="section-label">RECENT NEWS FEED</p>
+        <div class="flex items-center gap-1.5">
+          <span class="status-dot w-1.5 h-1.5 rounded-full bg-secondary"></span>
+          <span class="text-[10px] mono text-secondary">LIVE</span>
+        </div>
+      </div>
+      <div id="news-feed" class="flex flex-col gap-0 max-h-96 overflow-y-auto pr-1">
+        <div class="skeleton h-20 w-full mb-2 rounded-lg"></div>
+        <div class="skeleton h-20 w-full mb-2 rounded-lg"></div>
+        <div class="skeleton h-20 w-full rounded-lg"></div>
+      </div>
+    </div>
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <p class="section-label">SYSTEM METRICS</p>
+      <div class="flex flex-col gap-3" id="sys-metrics">
+        <div class="skeleton h-10 w-full"></div><div class="skeleton h-10 w-full"></div>
+        <div class="skeleton h-10 w-full"></div><div class="skeleton h-10 w-full"></div>
+      </div>
+      <div class="mt-auto pt-4 border-t border-outline-variant">
+        <p class="text-[10px] text-on-surface-variant">Session uptime</p>
+        <p class="mono text-sm font-bold text-secondary" id="sys-uptime">00:00:00</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       RESEARCH VALIDATION ENGINE SECTION
+  ══════════════════════════════════════════ -->
+
+  <!-- Section Divider -->
+  <div class="flex items-center gap-4 pt-4">
+    <div class="flex-1 h-px" style="background:linear-gradient(90deg,transparent,#7c8cff55,transparent);"></div>
+    <div class="flex items-center gap-2 px-4 py-2 rounded-full" style="background:#7c8cff12;border:1px solid #7c8cff30;">
+      <span class="material-symbols-outlined" style="font-size:15px;color:#7c8cff;FILL:1;">science</span>
+      <span style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#7c8cff;">RESEARCH VALIDATION ENGINE</span>
+    </div>
+    <div class="flex-1 h-px" style="background:linear-gradient(90deg,transparent,#7c8cff55,transparent);"></div>
+  </div>
+
+  <!-- ── ROW 5: Correlation Metric Cards ── -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+    <!-- Snapshots Collected -->
+    <div class="hud-card grad-research p-6 flex flex-col gap-3 metric-accent-cyan">
+      <div class="flex items-center justify-between">
+        <p class="section-label">SNAPSHOTS COLLECTED</p>
+        <span class="material-symbols-outlined text-secondary" style="font-size:22px;FILL:1;">database</span>
+      </div>
+      <p class="text-5xl font-bold mono text-secondary" id="corr-snapshots">—</p>
+      <p class="text-[11px] text-on-surface-variant">Market snapshots with NIFTY + herd data</p>
+    </div>
+
+    <!-- Herd-Return Correlation -->
+    <div class="hud-card grad-research p-6 flex flex-col gap-3 metric-accent-blue">
+      <div class="flex items-center justify-between">
+        <p class="section-label">HERD–RETURN CORRELATION</p>
+        <span class="material-symbols-outlined" style="font-size:22px;FILL:1;color:var(--clr-accent);">scatter_plot</span>
+      </div>
+      <p class="text-5xl font-bold mono" id="corr-value" style="color:var(--clr-accent);">—</p>
+      <p class="text-[11px] text-on-surface-variant">Pearson r · herd score → next-period return</p>
+    </div>
+
+    <!-- Avg Return after high herd -->
+    <div class="hud-card grad-research p-6 flex flex-col gap-3 metric-accent-green">
+      <div class="flex items-center justify-between">
+        <p class="section-label">AVG RETURN AFTER HERD &gt; 75</p>
+        <span class="material-symbols-outlined" style="font-size:22px;FILL:1;color:var(--clr-buy);">show_chart</span>
+      </div>
+      <p class="text-5xl font-bold mono" id="corr-avg-return" style="color:var(--clr-buy);">—</p>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-on-surface-variant">Based on</span>
+        <span class="mono text-xs font-bold text-on-surface" id="corr-n-high">0</span>
+        <span class="text-[11px] text-on-surface-variant">high-herd observations</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 6: Herd Trend + NIFTY Trend ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+    <!-- Herd Score Trend -->
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="section-label">HERD SCORE TREND</p>
+          <p class="text-[11px] text-on-surface-variant mt-0.5">avg_weighted_score from market_snapshots</p>
+        </div>
+        <div class="flex items-center gap-1.5 px-2 py-1 rounded-md" style="background:#7c8cff15;border:1px solid #7c8cff30;">
+          <span class="w-2 h-2 rounded-full" style="background:#7c8cff;"></span>
+          <span class="text-[10px] mono text-on-surface-variant">All time</span>
+        </div>
+      </div>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chart-herd-trend"></canvas>
+      </div>
+    </div>
+
+    <!-- NIFTY Price Trend -->
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="section-label">NIFTY 50 PRICE TREND</p>
+          <p class="text-[11px] text-on-surface-variant mt-0.5">nifty_price from market_snapshots · ^NSEI</p>
+        </div>
+        <div class="flex items-center gap-1.5 px-2 py-1 rounded-md" style="background:#22d3a015;border:1px solid #22d3a030;">
+          <span class="w-2 h-2 rounded-full" style="background:#22d3a0;"></span>
+          <span class="text-[10px] mono text-on-surface-variant">All time</span>
+        </div>
+      </div>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chart-nifty-trend"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 7: Sector Herding + Agent Distribution ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+    <!-- Sector Herding Bar -->
+    <div class="hud-card p-5 flex flex-col gap-4 lg:col-span-2">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="section-label">SECTOR HERDING INTENSITY</p>
+          <p class="text-[11px] text-on-surface-variant mt-0.5">AVG(confidence) by sector from agent_signals</p>
+        </div>
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px;FILL:1;">bar_chart</span>
+      </div>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chart-sector-herding"></canvas>
+      </div>
+    </div>
+
+    <!-- Agent Distribution Doughnut -->
+    <div class="hud-card p-5 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="section-label">AGENT DECISION SPLIT</p>
+          <p class="text-[11px] text-on-surface-variant mt-0.5">All-time direction counts</p>
+        </div>
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px;FILL:1;">donut_large</span>
+      </div>
+      <div class="chart-wrap" style="height:180px;">
+        <canvas id="chart-agent-dist"></canvas>
+      </div>
+      <div class="grid grid-cols-3 gap-1 text-center pt-1">
+        <div class="px-2 py-1.5 rounded-lg dir-buy">
+          <p class="text-[10px] text-on-surface-variant">BUY</p>
+          <p class="mono font-bold text-xs" id="dist-buy">—</p>
+        </div>
+        <div class="px-2 py-1.5 rounded-lg dir-hold">
+          <p class="text-[10px] text-on-surface-variant">HOLD</p>
+          <p class="mono font-bold text-xs" id="dist-hold">—</p>
+        </div>
+        <div class="px-2 py-1.5 rounded-lg dir-sell">
+          <p class="text-[10px] text-on-surface-variant">SELL</p>
+          <p class="mono font-bold text-xs" id="dist-sell">—</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 8: Correlation Scatter (full width) ── -->
+  <div class="hud-card p-6 flex flex-col gap-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <p class="section-label">HERD SCORE vs FUTURE NIFTY RETURN</p>
+        <p class="text-[12px] text-on-surface-variant mt-1">
+          Each point = one consecutive snapshot pair. Validates whether herd score predicts next-period market return.
+        </p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-lg" style="background:#7c8cff15;border:1px solid #7c8cff30;">
+          <span class="text-[11px] text-on-surface-variant mono">Pearson r</span>
+          <span class="mono font-bold text-base" id="scatter-corr" style="color:var(--clr-accent);">—</span>
+        </div>
+        <div class="flex items-center gap-2 px-3 py-2 rounded-lg" style="background:#44d8f115;border:1px solid #44d8f130;">
+          <span class="text-[11px] text-on-surface-variant mono">Pairs</span>
+          <span class="mono font-bold text-base text-secondary" id="scatter-pairs">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:300px;">
+      <canvas id="chart-scatter"></canvas>
+    </div>
+    <div id="scatter-empty" class="hidden text-center py-8">
+      <span class="material-symbols-outlined text-on-surface-variant" style="font-size:40px;">scatter_plot</span>
+      <p class="text-sm text-on-surface-variant mt-2">Collecting data… Run the pipeline a few more times to build correlation pairs.</p>
+      <p class="text-[11px] text-on-surface-variant mt-1">Need ≥ 2 consecutive market snapshots.</p>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toast -->
+<div id="toast" class="hud-card px-4 py-3 flex items-center gap-3 min-w-64">
+  <span class="material-symbols-outlined text-secondary" style="font-size:18px;FILL:1;">check_circle</span>
+  <span class="text-sm font-medium" id="toast-msg">Pipeline triggered.</span>
+</div>
+
+<!-- ══════════════ JAVASCRIPT ══════════════ -->
+<script>
+// ── Utility ───────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function showToast(msg, isError=false) {
+  const t = $('toast');
+  $('toast-msg').textContent = msg;
+  t.querySelector('.material-symbols-outlined').textContent = isError ? 'error' : 'check_circle';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function riskClass(level='') {
+  const l = level.toUpperCase();
+  if (l.includes('CRITICAL')) return 'badge-critical';
+  if (l.includes('HIGH'))     return 'badge-high';
+  if (l.includes('MEDIUM'))   return 'badge-medium';
+  return 'badge-low';
+}
+function dirClass(d='') {
+  const v = d.toUpperCase();
+  if (v==='BUY')  return 'dir-buy';
+  if (v==='SELL') return 'dir-sell';
+  return 'dir-hold';
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── Live Clock ────────────────────────────────────────────────────
+(function clockLoop() {
+  $('live-clock').textContent = new Date().toLocaleTimeString('en-IN', {hour12:false});
+  setTimeout(clockLoop, 1000);
+})();
+
+// ── Session Uptime ────────────────────────────────────────────────
+const _sessionStart = Date.now();
+setInterval(() => {
+  const s = Math.floor((Date.now() - _sessionStart) / 1000);
+  const h = String(Math.floor(s/3600)).padStart(2,'0');
+  const m = String(Math.floor((s%3600)/60)).padStart(2,'0');
+  const sec = String(s%60).padStart(2,'0');
+  $('sys-uptime').textContent = `${h}:${m}:${sec}`;
+}, 1000);
+
+// ── Mini Sparklines (custom canvas, rows 1–2) ─────────────────────
+function drawSparkline(canvasId, data, color1='#2962ff', color2='#7c8cff') {
+  const canvas = $(canvasId);
+  if (!canvas || data.length < 2) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 400;
+  const H = 140;
+  canvas.width = W; canvas.height = H;
+  const vals = data.map(d => d.value);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = max - min || 1;
+  const pad = {t:10,b:24,l:8,r:8};
+  const w = W-pad.l-pad.r, h = H-pad.t-pad.b;
+  const x = i => pad.l+(i/(data.length-1))*w;
+  const y = v => pad.t+h-((v-min)/range)*h;
+  const grad = ctx.createLinearGradient(0,pad.t,0,H-pad.b);
+  grad.addColorStop(0, color1+'44'); grad.addColorStop(1, color1+'00');
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath(); ctx.moveTo(x(0),y(vals[0]));
+  for (let i=1;i<data.length;i++){const cpx=(x(i-1)+x(i))/2;ctx.bezierCurveTo(cpx,y(vals[i-1]),cpx,y(vals[i]),x(i),y(vals[i]));}
+  ctx.lineTo(x(data.length-1),H-pad.b); ctx.lineTo(x(0),H-pad.b); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x(0),y(vals[0]));
+  for (let i=1;i<data.length;i++){const cpx=(x(i-1)+x(i))/2;ctx.bezierCurveTo(cpx,y(vals[i-1]),cpx,y(vals[i]),x(i),y(vals[i]));}
+  const lg=ctx.createLinearGradient(pad.l,0,W-pad.r,0); lg.addColorStop(0,color1); lg.addColorStop(1,color2);
+  ctx.strokeStyle=lg; ctx.lineWidth=2; ctx.stroke();
+  [[0,vals[0]],[data.length-1,vals[data.length-1]]].forEach(([i,v])=>{
+    ctx.beginPath();ctx.arc(x(i),y(v),3.5,0,Math.PI*2);ctx.fillStyle=color2;ctx.fill();
+  });
+  ctx.fillStyle='#8d90a2';ctx.font='9px JetBrains Mono';
+  ctx.textAlign='left'; ctx.fillText(data[0].label||'',x(0),H-6);
+  ctx.textAlign='right'; ctx.fillText(data[data.length-1].label||'',x(data.length-1),H-6);
+}
+
+// ── Ring Arc ──────────────────────────────────────────────────────
+function updateRing(score) {
+  const circ = 2*Math.PI*42;
+  const dash = (score/100)*circ;
+  $('ring-arc').setAttribute('stroke-dasharray',`${dash} ${circ-dash}`);
+  $('ring-score').textContent = score.toFixed(1);
+  const arc = $('ring-arc');
+  if (score>=85)      arc.setAttribute('stroke','#ff4d4d');
+  else if(score>=70)  arc.setAttribute('stroke','#ff9900');
+  else if(score>=55)  arc.setAttribute('stroke','#facc15');
+  else                arc.setAttribute('stroke','url(#arcGrad)');
+}
+
+// ── Existing data loaders ─────────────────────────────────────────
+async function loadHeroStats() {
+  try {
+    const [nifty,herd,arts,sigs] = await Promise.all([
+      fetchJSON('/api/nifty-price'), fetchJSON('/api/herd-score'),
+      fetchJSON('/api/articles-today'), fetchJSON('/api/signals-count'),
+    ]);
+    $('stat-nifty').textContent = nifty.price
+      ? Number(nifty.price).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+    $('stat-nifty-ts').textContent = nifty.timestamp ? `Updated ${nifty.timestamp}` : 'No data yet';
+    const score = parseFloat(herd.score||0);
+    $('stat-herd').textContent = score.toFixed(1);
+    updateRing(score);
+    const badge = $('stat-risk-badge');
+    badge.textContent = herd.risk_level||'LOW RISK';
+    badge.className = `inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${riskClass(herd.risk_level)}`;
+    $('stat-articles').textContent = arts.count??'0';
+    $('stat-signals').textContent  = sigs.count??'0';
+  } catch(e) { console.warn('loadHeroStats',e); }
+}
+
+async function loadHistory() {
+  try {
+    const data = await fetchJSON('/api/herd-history');
+    if (data.herd&&data.herd.length>1)
+      drawSparkline('canvas-herd-spark', data.herd.map(d=>({value:d.score,label:d.timestamp?d.timestamp.slice(11,16):''})),'#2962ff','#7c8cff');
+    if (data.snapshots&&data.snapshots.length>1)
+      drawSparkline('canvas-nifty-spark', data.snapshots.map(d=>({value:d.nifty_price,label:d.timestamp?d.timestamp.slice(11,16):''})),'#22d3a0','#44d8f1');
+  } catch(e) { console.warn('loadHistory',e); }
+}
+
+async function loadAgentSignals() {
+  try {
+    const signals = await fetchJSON('/api/agent-signals');
+    const container = $('agent-signals-list');
+    if (!signals.length) {
+      container.innerHTML='<p class="text-xs text-on-surface-variant text-center py-4">No signals yet – run the pipeline.</p>';
+      return;
+    }
+    const tally={BUY:0,HOLD:0,SELL:0};
+    signals.forEach(s=>{tally[s.direction]=(tally[s.direction]||0)+1;});
+    const total=signals.length||1;
+    $('vote-buy').textContent  = `${((tally.BUY/total)*100).toFixed(0)}%`;
+    $('vote-hold').textContent = `${((tally.HOLD/total)*100).toFixed(0)}%`;
+    $('vote-sell').textContent = `${((tally.SELL/total)*100).toFixed(0)}%`;
+    container.innerHTML = signals.map(s=>`
+      <div class="flex items-center gap-3 p-3 rounded-lg" style="background:#ffffff07;">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background:#2962ff22;">
+          <span class="material-symbols-outlined text-primary" style="font-size:16px;FILL:1;">smart_toy</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-semibold text-on-surface capitalize">${(s.name||'').replace('_',' ')}</p>
+          <p class="text-[10px] text-on-surface-variant truncate">${s.sector||'—'} · ${s.impact||'—'} impact</p>
+        </div>
+        <div class="flex flex-col items-end gap-1">
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold mono ${dirClass(s.direction)}">${s.direction}</span>
+          <span class="text-[10px] mono text-on-surface-variant">${s.confidence}%</span>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.warn('loadAgentSignals',e); }
+}
+
+async function loadSectors() {
+  try {
+    const data = await fetchJSON('/api/sector-analysis');
+    const container = $('sector-list');
+    const entries = Object.entries(data).sort((a,b)=>b[1]-a[1]).filter(([,v])=>v>0).slice(0,7);
+    if (!entries.length) {container.innerHTML='<p class="text-xs text-on-surface-variant text-center py-4">No sector data yet.</p>';return;}
+    container.innerHTML = entries.map(([sector,pct])=>`
+      <div><div class="flex justify-between mb-1">
+        <span class="text-[11px] font-semibold text-on-surface">${sector}</span>
+        <span class="text-[11px] mono text-on-surface-variant">${pct}%</span>
+      </div><div class="w-full h-1.5 rounded-full" style="background:#2a2e39;">
+        <div class="sector-bar" style="width:${pct}%;"></div>
+      </div></div>`).join('');
+  } catch(e) { console.warn('loadSectors',e); }
+}
+
+async function loadEventImpact() {
+  try {
+    const data = await fetchJSON('/api/event-impact');
+    const container = $('event-list');
+    const entries = Object.entries(data).sort((a,b)=>b[1]-a[1]).filter(([,v])=>v>0).slice(0,7);
+    if (!entries.length) {container.innerHTML='<p class="text-xs text-on-surface-variant text-center py-4">No event data yet.</p>';return;}
+    const colors=['#7c8cff','#44d8f1','#ffb59a','#22d3a0','#f59e0b','#f87171','#a78bfa'];
+    container.innerHTML = entries.map(([type,pct],i)=>`
+      <div><div class="flex justify-between mb-1">
+        <span class="text-[11px] font-semibold text-on-surface">${type}</span>
+        <span class="text-[11px] mono text-on-surface-variant">${pct}%</span>
+      </div><div class="w-full h-1.5 rounded-full" style="background:#2a2e39;">
+        <div style="width:${pct}%;height:6px;border-radius:3px;background:${colors[i%colors.length]};transition:width .8s;"></div>
+      </div></div>`).join('');
+  } catch(e) { console.warn('loadEventImpact',e); }
+}
+
+async function loadNewsFeed() {
+  try {
+    const news = await fetchJSON('/api/recent-news');
+    const container = $('news-feed');
+    if (!news.length) {container.innerHTML='<p class="text-xs text-on-surface-variant text-center py-6">No articles yet – run the pipeline.</p>';return;}
+    container.innerHTML = news.map(n=>`
+      <div class="feed-item px-3 py-3 border-b border-outline-variant last:border-0">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <p class="text-xs font-semibold text-on-surface leading-snug line-clamp-2">${n.title||'Untitled'}</p>
+          <span class="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mono ${riskClass(n.risk_level||'LOW')}">
+            ${n.herd_score!=null?Number(n.herd_score).toFixed(0)+'%':'—'}
+          </span>
+        </div>
+        <p class="text-[11px] text-on-surface-variant line-clamp-2 mb-1">${n.excerpt||''}</p>
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] text-on-surface-variant">${n.time||''}</span>
+          <span class="text-[10px] font-semibold ${riskClass(n.risk_level||'LOW')} px-1.5 py-0.5 rounded">${n.risk_level||'—'}</span>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.warn('loadNewsFeed',e); }
+}
+
+async function loadSystemMetrics() {
+  try {
+    const m = await fetchJSON('/api/system-metrics');
+    const container = $('sys-metrics');
+    container.innerHTML = `
+      <div class="flex justify-between items-center py-2 border-b border-outline-variant">
+        <span class="text-[11px] text-on-surface-variant">Total Articles</span>
+        <span class="mono text-sm font-bold text-on-surface">${m.total_articles??'—'}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-outline-variant">
+        <span class="text-[11px] text-on-surface-variant">Agent Signals</span>
+        <span class="mono text-sm font-bold text-on-surface">${m.agent_signals??'—'}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-outline-variant">
+        <span class="text-[11px] text-on-surface-variant">Herd Records</span>
+        <span class="mono text-sm font-bold text-on-surface">${m.herd_records??'—'}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-outline-variant">
+        <span class="text-[11px] text-on-surface-variant">Avg Latency</span>
+        <span class="mono text-sm font-bold text-secondary">${m.avg_latency??'—'}</span>
+      </div>
+      <div class="flex justify-between items-center py-2">
+        <span class="text-[11px] text-on-surface-variant">Active Nodes</span>
+        <span class="mono text-sm font-bold" style="color:var(--clr-buy);">${m.active_nodes??'—'}</span>
+      </div>`;
+  } catch(e) { console.warn('loadSystemMetrics',e); }
+}
+
+// ── Pipeline Trigger ──────────────────────────────────────────────
+async function triggerPipeline() {
+  const btn=$('btn-run-pipeline'), icon=$('pipeline-icon');
+  btn.disabled=true; icon.classList.add('spin'); icon.textContent='sync';
+  showToast('Pipeline started – fetching news & running AI agents…');
+  try { await fetch('/api/run-pipeline',{method:'POST'}); }
+  catch(e) { showToast('Pipeline request failed.',true); }
+  finally { setTimeout(()=>{btn.disabled=false;icon.classList.remove('spin');icon.textContent='play_arrow';},3000); }
+}
+
+// ── Snapshot Countdown Timer ─────────────────────────────────────
+let _snapshotSecsLeft = 15 * 60;  // default; synced from server
+
+async function syncSchedulerStatus() {
+  try {
+    const s = await fetchJSON('/api/scheduler-status');
+    if (s.next_snapshot_secs > 0) _snapshotSecsLeft = s.next_snapshot_secs;
+  } catch(_) {}
+}
+
+function renderCountdown() {
+  const m = String(Math.floor(_snapshotSecsLeft / 60)).padStart(2,'0');
+  const s = String(_snapshotSecsLeft % 60).padStart(2,'0');
+  const el = $('snapshot-countdown');
+  if (!el) return;
+  el.textContent = `${m}:${s}`;
+  el.style.color = _snapshotSecsLeft <= 60 ? '#22d3a0' : '#44d8f1';
+}
+
+// Tick down every second
+setInterval(() => {
+  if (_snapshotSecsLeft > 0) _snapshotSecsLeft--;
+  else _snapshotSecsLeft = 15 * 60;  // reset if SSE was missed
+  renderCountdown();
+}, 1000);
+
+syncSchedulerStatus();
+setInterval(syncSchedulerStatus, 5 * 60 * 1000);  // re-sync every 5 min
+
+// ── SSE Live Feed ─────────────────────────────────────────────────
+function connectSSE() {
+  const es = new EventSource('/api/live-feed');
+  es.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data);
+
+      if (data.type === 'snapshot_complete') {
+        // Auto-snapshot fired → reset countdown & refresh data
+        _snapshotSecsLeft = 15 * 60;
+        renderCountdown();
+        const niftyFmt = Number(data.nifty_price).toLocaleString('en-IN',{maximumFractionDigits:0});
+        showToast(
+          `✓ Auto-snapshot · NIFTY ₹${niftyFmt}` +
+          ` · Herd ${Number(data.herd_score).toFixed(1)}% · ${data.risk_level}`
+        );
+        // Only refresh what changed (lightweight – no chart.js rebuild)
+        loadHeroStats();
+        loadHistory();
+        loadChartHerdTrend();
+        loadChartNiftyTrend();
+        loadCorrelationAnalytics();
+
+      } else if (data.type === 'pipeline_complete') {
+        showToast(`Pipeline done – ${data.articles_processed??0} articles, herd=${(data.avg_herd_score||0).toFixed(1)}%`);
+        refreshAll();
+
+      } else if (data.type === 'pipeline_error') {
+        showToast('Pipeline error: '+(data.error||'unknown'), true);
+      }
+    } catch(_) {}
+  };
+  es.onerror = () => { es.close(); setTimeout(connectSSE, 5000); };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CHART.JS – RESEARCH VALIDATION ENGINE
+// ══════════════════════════════════════════════════════════════════
+
+// Chart.js global style
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.color = '#8d90a2';
+
+const TOOLTIP = {
+  backgroundColor: 'rgba(18,20,30,.96)',
+  titleColor: '#e1e1ee',
+  bodyColor:  '#c3c5d8',
+  borderColor:'#434656',
+  borderWidth: 1,
+  padding: 10,
+  titleFont: { size:11 },
+  bodyFont:  { size:11 },
+};
+const GRID = { color:'#2a2e3955' };
+const TICK = { color:'#8d90a2', font:{ size:9 } };
+const BORDER = { color:'#2a2e39' };
+
+// Store chart instances for live updates
+const CJ = {};
+
+// ── Make gradient fill ────────────────────────────────────────────
+function makeGrad(ctx, c1, h=220) {
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0, c1+'55'); g.addColorStop(1, c1+'00');
+  return g;
+}
+
+// ── Linear regression for scatter trendline ───────────────────────
+function linReg(pts) {
+  const n = pts.length;
+  if (n < 2) return null;
+  const sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
+  const sxy=pts.reduce((a,p)=>a+p.x*p.y,0), sx2=pts.reduce((a,p)=>a+p.x*p.x,0);
+  const denom = n*sx2-sx*sx;
+  if (!denom) return null;
+  const slope=(n*sxy-sx*sy)/denom, intercept=(sy-slope*sx)/n;
+  const minX=Math.min(...pts.map(p=>p.x)), maxX=Math.max(...pts.map(p=>p.x));
+  return [{x:minX,y:slope*minX+intercept},{x:maxX,y:slope*maxX+intercept}];
+}
+
+// ── Herd Score Trend ──────────────────────────────────────────────
+async function loadChartHerdTrend() {
+  const raw = await fetchJSON('/api/chart/herd-trend').catch(()=>[]);
+  if (!raw.length) return;
+  const labels = raw.map(d => d.t ? d.t.slice(5,16).replace('T',' ') : '');
+  const values = raw.map(d => d.v ?? 0);
+  const canvas = $('chart-herd-trend');
+  const ctx = canvas.getContext('2d');
+
+  const chartData = {
+    labels,
+    datasets:[{
+      label:'Herd Score (%)',
+      data: values,
+      borderColor:'#7c8cff',
+      backgroundColor: makeGrad(ctx,'#2962ff'),
+      tension:0.4, fill:true,
+      pointRadius: raw.length<=30 ? 3 : 0,
+      pointHoverRadius:5, borderWidth:2,
+    }]
+  };
+
+  if (CJ.herdTrend) {
+    CJ.herdTrend.data = chartData; CJ.herdTrend.update('active');
+  } else {
+    CJ.herdTrend = new Chart(ctx, {
+      type:'line', data:chartData,
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:TOOLTIP },
+        scales:{
+          x:{ grid:GRID, ticks:{...TICK,maxTicksLimit:7}, border:BORDER },
+          y:{ grid:GRID, ticks:TICK, border:BORDER, min:0, max:100,
+              title:{display:true,text:'Herd Score (%)',color:'#8d90a2',font:{size:9}} }
+        }
+      }
+    });
+  }
+}
+
+// ── NIFTY Price Trend ─────────────────────────────────────────────
+async function loadChartNiftyTrend() {
+  const raw = await fetchJSON('/api/chart/nifty-trend').catch(()=>[]);
+  if (!raw.length) return;
+  const labels = raw.map(d => d.t ? d.t.slice(5,16).replace('T',' ') : '');
+  const values = raw.map(d => d.v ?? 0);
+  const canvas = $('chart-nifty-trend');
+  const ctx = canvas.getContext('2d');
+
+  const chartData = {
+    labels,
+    datasets:[{
+      label:'NIFTY Price (₹)',
+      data: values,
+      borderColor:'#22d3a0',
+      backgroundColor: makeGrad(ctx,'#22d3a0'),
+      tension:0.4, fill:true,
+      pointRadius: raw.length<=30 ? 3 : 0,
+      pointHoverRadius:5, borderWidth:2,
+    }]
+  };
+
+  if (CJ.niftyTrend) {
+    CJ.niftyTrend.data = chartData; CJ.niftyTrend.update('active');
+  } else {
+    CJ.niftyTrend = new Chart(ctx, {
+      type:'line', data:chartData,
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:TOOLTIP },
+        scales:{
+          x:{ grid:GRID, ticks:{...TICK,maxTicksLimit:7}, border:BORDER },
+          y:{ grid:GRID, ticks:{...TICK, callback: v=>'₹'+Number(v).toLocaleString('en-IN')}, border:BORDER,
+              title:{display:true,text:'NIFTY 50 (₹)',color:'#8d90a2',font:{size:9}} }
+        }
+      }
+    });
+  }
+}
+
+// ── Sector Herding Bar ────────────────────────────────────────────
+async function loadChartSectorHerding() {
+  const raw = await fetchJSON('/api/chart/sector-herding').catch(()=>[]);
+  if (!raw.length) return;
+
+  const PALETTE = ['#7c8cff','#44d8f1','#22d3a0','#ffb59a','#f59e0b','#f87171','#a78bfa','#fb7185','#34d399','#60a5fa'];
+  const chartData = {
+    labels: raw.map(d => d.sector),
+    datasets:[{
+      label:'Avg Confidence (%)',
+      data: raw.map(d => d.score),
+      backgroundColor: raw.map((_,i) => PALETTE[i%PALETTE.length]+'cc'),
+      borderColor:     raw.map((_,i) => PALETTE[i%PALETTE.length]),
+      borderWidth:1, borderRadius:4, borderSkipped:false,
+    }]
+  };
+
+  if (CJ.sectorHerding) {
+    CJ.sectorHerding.data = chartData; CJ.sectorHerding.update('active');
+  } else {
+    CJ.sectorHerding = new Chart($('chart-sector-herding').getContext('2d'), {
+      type:'bar', data:chartData,
+      options:{
+        responsive:true, maintainAspectRatio:false, indexAxis:'y',
+        plugins:{ legend:{display:false}, tooltip:TOOLTIP },
+        scales:{
+          x:{ grid:GRID, ticks:TICK, border:BORDER, min:0, max:100 },
+          y:{ grid:{display:false}, ticks:{...TICK,font:{size:10}}, border:BORDER }
+        }
+      }
+    });
+  }
+}
+
+// ── Agent Direction Doughnut ──────────────────────────────────────
+async function loadChartAgentDist() {
+  const raw = await fetchJSON('/api/chart/agent-distribution').catch(()=>[]);
+  if (!raw.length) return;
+
+  const colorMap = {BUY:'#22d3a0', HOLD:'#f59e0b', SELL:'#f87171'};
+  const sorted   = ['BUY','HOLD','SELL'].map(d => raw.find(r=>r.direction===d)||{direction:d,count:0});
+
+  // Update summary numbers
+  sorted.forEach(d => {
+    const el = $('dist-'+d.direction.toLowerCase());
+    if (el) el.textContent = d.count;
+  });
+
+  const chartData = {
+    labels: sorted.map(d=>d.direction),
+    datasets:[{
+      data: sorted.map(d=>d.count),
+      backgroundColor: sorted.map(d=>(colorMap[d.direction]||'#888')+'88'),
+      borderColor:     sorted.map(d=>(colorMap[d.direction]||'#888')),
+      borderWidth:2, hoverOffset:6,
+    }]
+  };
+
+  if (CJ.agentDist) {
+    CJ.agentDist.data = chartData; CJ.agentDist.update('active');
+  } else {
+    CJ.agentDist = new Chart($('chart-agent-dist').getContext('2d'), {
+      type:'doughnut', data:chartData,
+      options:{
+        responsive:true, maintainAspectRatio:false, cutout:'72%',
+        plugins:{
+          legend:{
+            position:'bottom',
+            labels:{ color:'#c3c5d8', font:{size:10}, boxWidth:10, padding:12 }
+          },
+          tooltip:TOOLTIP,
+        }
+      }
+    });
+  }
+}
+
+// ── Correlation Scatter ───────────────────────────────────────────
+function renderScatter(scatter, corr, pairs) {
+  const pts = scatter.map(s => ({x:s.herd, y:s['return']}));
+  const trend = linReg(pts);
+
+  const scatterColor = corr > 0.3 ? '#22d3a0' : corr < -0.3 ? '#f87171' : '#44d8f1';
+
+  const datasets = [{
+    label: 'Observation',
+    type: 'scatter',
+    data: pts,
+    backgroundColor: scatterColor+'66',
+    borderColor: scatterColor,
+    pointRadius: 5,
+    pointHoverRadius: 8,
+    borderWidth: 1.5,
+  }];
+
+  if (trend) {
+    datasets.push({
+      label: 'Trend',
+      type: 'line',
+      data: trend,
+      borderColor: '#7c8cff',
+      borderWidth: 2,
+      borderDash: [5,4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+    });
+  }
+
+  if (CJ.scatter) {
+    CJ.scatter.data.datasets = datasets;
+    CJ.scatter.update('active');
+  } else {
+    CJ.scatter = new Chart($('chart-scatter').getContext('2d'), {
+      type:'scatter',
+      data:{ datasets },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ labels:{ color:'#c3c5d8', font:{size:10}, boxWidth:10, padding:14 } },
+          tooltip:{
+            ...TOOLTIP,
+            callbacks:{
+              label: ctx => {
+                if (ctx.raw.y===undefined) return `Trend`;
+                return `Herd: ${ctx.raw.x.toFixed(1)}% → Return: ${ctx.raw.y >= 0 ? '+' : ''}${ctx.raw.y.toFixed(3)}%`;
+              }
+            }
+          }
+        },
+        scales:{
+          x:{ type:'linear', grid:GRID, ticks:TICK, border:BORDER,
+              title:{display:true, text:'Herd Score (%)', color:'#8d90a2', font:{size:10}} },
+          y:{ type:'linear', grid:GRID, ticks:TICK, border:BORDER,
+              title:{display:true, text:'Next-Period NIFTY Return (%)', color:'#8d90a2', font:{size:10}} }
+        }
+      }
+    });
+  }
+}
+
+// ── Load Correlation Analytics ────────────────────────────────────
+async function loadCorrelationAnalytics() {
+  try {
+    const d = await fetchJSON('/api/correlation-analytics');
+
+    $('corr-snapshots').textContent = d.snapshots ?? '—';
+
+    const corr = d.correlation ?? null;
+    const corrEl = $('corr-value');
+    corrEl.textContent = corr !== null ? corr.toFixed(3) : '—';
+    corrEl.style.color = corr > 0.5 ? '#22d3a0' : corr > 0 ? '#f59e0b' : corr < -0.3 ? '#f87171' : '#7c8cff';
+
+    const ret = d.avg_return_high_herd ?? null;
+    const retEl = $('corr-avg-return');
+    retEl.textContent = ret !== null ? (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%' : '—';
+    retEl.style.color = ret > 0 ? '#22d3a0' : ret < 0 ? '#f87171' : '#c3c5d8';
+
+    $('corr-n-high').textContent   = d.n_high_herd ?? 0;
+    $('scatter-corr').textContent  = corr !== null ? corr.toFixed(3) : '—';
+    $('scatter-pairs').textContent = d.pairs_available ?? 0;
+
+    // Show/hide scatter
+    const hasData = (d.pairs_available ?? 0) >= 2;
+    $('scatter-empty').classList.toggle('hidden', hasData);
+    $('chart-scatter').style.display = hasData ? 'block' : 'none';
+
+    if (hasData) {
+      renderScatter(d.scatter || [], corr || 0, d.pairs_available || 0);
+    }
+  } catch(e) { console.warn('loadCorrelationAnalytics',e); }
+}
+
+// ── Load all analytics charts ─────────────────────────────────────
+async function loadAnalytics() {
+  await Promise.all([
+    loadChartHerdTrend(),
+    loadChartNiftyTrend(),
+    loadChartSectorHerding(),
+    loadChartAgentDist(),
+    loadCorrelationAnalytics(),
+  ]);
+}
+
+// ── Master refresh ────────────────────────────────────────────────
+function refreshAll() {
+  loadHeroStats();
+  loadHistory();
+  loadAgentSignals();
+  loadSectors();
+  loadEventImpact();
+  loadNewsFeed();
+  loadSystemMetrics();
+  loadAnalytics();
+}
+
+// Initial load
+refreshAll();
+connectSSE();
+
+// Poll every 30s
+setInterval(refreshAll, 30_000);
+
+// Redraw sparklines on resize
+window.addEventListener('resize', () => { loadHistory(); });
+</script>
+</body>
+</html>

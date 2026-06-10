@@ -3,11 +3,16 @@ from dotenv import load_dotenv
 import os
 import json
 
-load_dotenv()
+load_dotenv(override=True)
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+
+def get_groq_client():
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is not set")
+
+    return Groq(api_key=api_key)
 
 def analyze_news(title, content,agent_prompt):
 
@@ -32,6 +37,8 @@ Return format:
     "impact": "LOW/MEDIUM/HIGH"
 }}
 """
+
+    client = get_groq_client()
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",

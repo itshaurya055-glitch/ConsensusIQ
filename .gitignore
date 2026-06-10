@@ -1,6 +1,51 @@
-.venv/
-.env
+# ── Python ────────────────────────────────
 __pycache__/
-*.pyc
-market_news.db
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+
+# ── Virtual Environments ──────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── uv / pip ──────────────────────────────
+# uv.lock IS committed (reproducible installs)
+.python-version
+
+# ── Environment / Secrets ─────────────────
+.env
+.env.*
+!.env.example
+
+# ── Database ──────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+data/logs/
+
+# ── IDE / Editor ──────────────────────────
 .vscode/
+.idea/
+.cursor/
+.claude/
+*.code-workspace
+
+# ── OS ────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs & temp ───────────────────────────
+*.log
+logs/
+tmp/
+temp/
+
+# ── Distribution / Build ──────────────────
+dist/
+build/
+*.egg-info/
