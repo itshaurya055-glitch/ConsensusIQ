@@ -489,14 +489,14 @@ def correlation_analytics():
     # Consecutive snapshot pairs → (herd_score_t, return_t+1)
     rows = conn.execute(
         """
-        SELECT
-            s1.avg_weighted_score AS herd,
-            s1.nifty_price        AS p1,
-            s2.nifty_price        AS p2
-        FROM market_snapshots s1
-        JOIN market_snapshots s2 ON s2.id = s1.id + 1
-        WHERE s1.nifty_price > 0 AND s2.nifty_price > 0
-          AND s1.avg_weighted_score > 0
+        SELECT herd, p1, p2 FROM (
+            SELECT
+                avg_weighted_score AS herd,
+                nifty_price        AS p1,
+                LEAD(nifty_price) OVER (ORDER BY timestamp ASC) AS p2
+            FROM market_snapshots
+            WHERE nifty_price > 0 AND avg_weighted_score > 0
+        ) WHERE p2 IS NOT NULL
         """
     ).fetchall()
     conn.close()
